@@ -1,4 +1,5 @@
 {
+  "framework": "vue",
   "builds": [
     {
       "src": "package.json",
