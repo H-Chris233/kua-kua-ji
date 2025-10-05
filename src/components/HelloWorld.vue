@@ -14,6 +14,7 @@
         <p>有效期：见面后立刻兑现</p>
         <div class="hug-image-container">
           <img src="../assets/mua.png" alt="Hug Image" class="hug-image">
+          <div class="easter-egg-label">彩蛋！</div>
         </div>
         <button class="close-modal" @click="showHugModal = false">关闭</button>
       </div>
@@ -69,7 +70,9 @@ export default {
         '你让我相信了爱情最美好的样子',
         '点击领取真人拥抱券（有效期：见面后立刻兑现）'
       ],
-      showHugModal: false
+      showHugModal: false,
+      isDebugMode: false,
+      noHugCount: 0 // 没有出现拥抱券的连续次数计数器
     }
   },
   computed: {
@@ -81,11 +84,28 @@ export default {
     }
   },
   mounted() {
-    // Display a random praise when the component mounts (page loads)
-    this.getNewPraise();
+    // 检查URL参数中是否包含debug
+    const urlParams = new URLSearchParams(window.location.search);
+    this.isDebugMode = urlParams.has('debug');
+    
+    if (this.isDebugMode) {
+      // 如果是debug模式，直接显示拥抱券文案
+      this.showHugCoupon();
+    } else {
+      // 否则正常显示随机夸夸
+      this.getNewPraise();
+    }
   },
   methods: {
     getNewPraise() {
+      // 检查是否达到保底次数（10次未获得拥抱券）
+      if (this.noHugCount >= 9) { // 使用9是因为当前这次刷新也算一次，总计10次
+        // 强制显示拥抱券
+        this.showHugCoupon();
+        this.noHugCount = 0; // 重置计数器
+        return;
+      }
+
       // Get a random praise from the array, ensuring it's different from the previous one
       let randomIndex;
       let attempts = 0;
@@ -99,6 +119,26 @@ export default {
       this.previousPraise = this.praises[randomIndex];
       this.currentPraise = this.praises[randomIndex];
       this.counter++;
+      
+      // 检查本次是否获得了拥抱券
+      if (this.currentPraise === this.hugCouponText) {
+        this.noHugCount = 0; // 重置计数器
+      } else {
+        this.noHugCount++; // 增加未获得拥抱券的计数
+      }
+      
+      // Show floating hearts animation
+      this.showNewHearts = true;
+      setTimeout(() => {
+        this.showNewHearts = false;
+      }, 1000);
+    },
+    showHugCoupon() {
+      // 直接显示拥抱券文案
+      this.previousPraise = this.currentPraise;
+      this.currentPraise = this.hugCouponText;
+      this.counter++;
+      this.noHugCount = 0; // 获得拥抱券后重置计数器
       
       // Show floating hearts animation
       this.showNewHearts = true;
@@ -236,6 +276,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative; /* 添加相对定位，让子元素可以绝对定位 */
 }
 
 .hug-image {
@@ -243,6 +284,20 @@ export default {
   max-height: 300px;
   border-radius: 10px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.easter-egg-label {
+  position: absolute;
+  bottom: 25px;
+  right: 20px;
+  background-color: rgba(255, 215, 0, 0.9); /* 金色半透明背景 */
+  color: #d4af37; /* 深金色文字 */
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  z-index: 3; /* 确保标签在图片上方 */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .close-modal {
