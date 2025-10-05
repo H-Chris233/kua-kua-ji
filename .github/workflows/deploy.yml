@@ -17,11 +17,13 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
-        cache: 'npm'
+        cache: 'pnpm'
+
+    - name: Install pnpm
+      run: npm install -g pnpm
 
     - name: Install dependencies
       run: pnpm install
-      # If you're using pnpm, you might need to install it first
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -34,5 +36,5 @@ jobs:
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./dist
+        publish_dir: ./docs
         publish_branch: gh-pages
