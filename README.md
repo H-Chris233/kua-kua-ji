@@ -1,4 +1,6 @@
-# kua-kua-ji
+# 今日夸夸机
+
+一个给Queena写的夸夸机网站
 
 ## Project setup
 ```
@@ -12,12 +14,12 @@ pnpm run serve
 
 ### Compiles and minifies for production
 ```
-pnpm run build
+npm run build
 ```
 
 ### Lints and fixes files
 ```
-pnpm run lint
+npm run lint
 ```
 
 ### Customize configuration
