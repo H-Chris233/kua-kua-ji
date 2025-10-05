@@ -16,9 +16,7 @@ pnpm run serve
 
 ### Compiles and minifies for production
 ```
-DEPLOY_PLATFORM=vercel pnpm run build  # for Vercel
-# or
-pnpm run build  # for GitHub Pages
+pnpm run build
 ```
 
 ### Lints and fixes files
@@ -30,5 +28,5 @@ npm run lint
 See [Configuration Reference](https://cli.vuejs.org/config/).
 
 ### 部署
-- GitHub Pages: 使用 `docs` 目录构建
-- Vercel: 使用 `dist` 目录构建（通过 vercel.json 配置）
+- 构建输出目录：`dist`
+- 支持 Vercel 部署（通过 vercel.json 配置）
