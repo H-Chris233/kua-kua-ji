@@ -1,28 +1,40 @@
 <template>
   <div class="praise-machine">
     <h1 class="title">今日夸夸机</h1>
-    <div class="praise-container">
+    <div class="praise-container" role="region" aria-live="polite" aria-label="夸夸内容">
       <transition name="fade" mode="out-in">
-        <p class="praise-text" :key="currentPraise" v-html="displayPraise" @click="handlePraiseClick"></p>
+        <p class="praise-text" :key="currentPraise">
+          <template v-if="isHugCoupon">
+            <span class="hug-coupon" role="button" tabindex="0" @click.stop="showHugImage" @keydown.enter.prevent="showHugImage" @keydown.space.prevent="showHugImage">{{ hugCouponText }}</span>
+          </template>
+          <template v-else>
+            {{ currentPraise }}
+          </template>
+        </p>
       </transition>
     </div>
     
     <!-- Hug Image Modal -->
     <div v-if="showHugModal" class="modal-overlay" @click="showHugModal = false">
-      <div class="modal-content" @click.stop>
-        <h2>真人拥抱券</h2>
-        <p>有效期：见面后立刻兑现</p>
+      <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="hug-title" aria-describedby="hug-desc" @click.stop>
+        <h2 id="hug-title">真人拥抱券</h2>
+        <p id="hug-desc">有效期：见面后立刻兑现</p>
         <div class="hug-image-container">
-          <img src="../assets/mua.png" alt="Hug Image" class="hug-image">
+          <img src="../assets/mua.png" alt="拥抱券图片" class="hug-image">
           <div class="easter-egg-label">彩蛋！</div>
         </div>
         <button class="close-modal" @click="showHugModal = false">关闭</button>
       </div>
     </div>
     <div class="counter">已查看 {{ counter }} 条夸夸</div>
-    <button class="praise-button" @click="getNewPraise">
-      <span class="button-text">点击刷新夸夸</span>
-    </button>
+    <div class="actions">
+      <button class="praise-button" :disabled="isRefreshing" @click="getNewPraise" aria-label="刷新夸夸">
+        <span class="button-text">{{ isRefreshing ? '刷新中...' : '点击刷新夸夸' }}</span>
+      </button>
+      <button class="secondary-button" @click="copyPraise" aria-label="复制当前夸夸">
+        复制夸夸
+      </button>
+    </div>
     <div class="hearts">
       <span class="heart">💖</span>
       <span class="heart">💗</span>
@@ -32,6 +44,7 @@
     <div v-if="showNewHearts" class="new-hearts">
       <span v-for="n in 8" :key="n" class="new-heart">💖</span>
     </div>
+    <div v-if="showToast" class="toast" aria-live="polite">{{ toastText }}</div>
     <footer class="footer">
       From Chris to Queena
     </footer>
@@ -86,86 +99,152 @@ export default {
       ],
       showHugModal: false,
       isDebugMode: false,
-      noHugCount: 0 // 没有出现拥抱券的连续次数计数器
+      noHugCount: 0, // 没有出现拥抱券的连续次数计数器
+      isRefreshing: false,
+      showToast: false,
+      toastText: ''
     }
   },
   computed: {
-    displayPraise() {
-      if (this.currentPraise === this.hugCouponText) {
-        return `<span class="hug-coupon" @click="showHugImage">${this.hugCouponText}</span>`;
-      }
-      return this.currentPraise;
+    isHugCoupon() {
+      return this.currentPraise === this.hugCouponText
     }
   },
   mounted() {
+    const saved = parseInt(localStorage.getItem('praiseCounter') || '0', 10)
+    if (!isNaN(saved)) this.counter = saved
+
+    // 键盘Esc关闭弹窗
+    this._handleKeydown = e => {
+      if (e.key === 'Escape' && this.showHugModal) this.showHugModal = false
+    }
+    window.addEventListener('keydown', this._handleKeydown)
+
+    // 监听弹窗开关以控制滚动与聚焦
+    this.$watch(() => this.showHugModal, val => {
+      document.body.style.overflow = val ? 'hidden' : ''
+      if (val) {
+        this.$nextTick(() => {
+          const btn = this.$el.querySelector('.close-modal')
+          if (btn) btn.focus()
+        })
+      }
+    })
+
     // 检查URL参数中是否包含debug
-    const urlParams = new URLSearchParams(window.location.search);
-    this.isDebugMode = urlParams.has('debug');
+    const urlParams = new URLSearchParams(window.location.search)
+    this.isDebugMode = urlParams.has('debug')
     
     if (this.isDebugMode) {
-      // 如果是debug模式，直接显示拥抱券文案
-      this.showHugCoupon();
+      this.showHugCoupon()
     } else {
-      // 否则正常显示随机夸夸
-      this.getNewPraise();
+      this.getNewPraise()
+    }
+  },
+  unmounted() {
+    if (this._handleKeydown) {
+      window.removeEventListener('keydown', this._handleKeydown)
     }
   },
   methods: {
     getNewPraise() {
-      // 检查是否达到保底次数（10次未获得拥抱券）
-      if (this.noHugCount >= 9) { // 使用9是因为当前这次刷新也算一次，总计10次
-        // 强制显示拥抱券
-        this.showHugCoupon();
-        this.noHugCount = 0; // 重置计数器
-        return;
+      if (this.isRefreshing) return
+      this.isRefreshing = true
+
+      if (this.noHugCount >= 9) {
+        this.showHugCoupon()
+        this.noHugCount = 0
+        setTimeout(() => {
+          this.isRefreshing = false
+        }, 350)
+        return
       }
 
-      // Get a random praise from the array, ensuring it's different from the previous one
-      let randomIndex;
-      let attempts = 0;
-      const maxAttempts = this.praises.length; // Max attempts to avoid infinite loop
+      let randomIndex
+      let attempts = 0
+      const maxAttempts = this.praises.length
       
       do {
-        randomIndex = Math.floor(Math.random() * this.praises.length);
-        attempts++;
-      } while (this.praises[randomIndex] === this.previousPraise && attempts < maxAttempts);
+        randomIndex = Math.floor(Math.random() * this.praises.length)
+        attempts++
+      } while (this.praises[randomIndex] === this.previousPraise && attempts < maxAttempts)
       
-      this.previousPraise = this.praises[randomIndex];
-      this.currentPraise = this.praises[randomIndex];
-      this.counter++;
+      this.previousPraise = this.praises[randomIndex]
+      this.currentPraise = this.praises[randomIndex]
+      this.counter++
+      this.persistCounter()
       
-      // 检查本次是否获得了拥抱券
       if (this.currentPraise === this.hugCouponText) {
-        this.noHugCount = 0; // 重置计数器
+        this.noHugCount = 0
       } else {
-        this.noHugCount++; // 增加未获得拥抱券的计数
+        this.noHugCount++
       }
       
-      // Show floating hearts animation
-      this.showNewHearts = true;
+      this.showNewHearts = true
       setTimeout(() => {
-        this.showNewHearts = false;
-      }, 1000);
+        this.showNewHearts = false
+      }, 1000)
+
+      setTimeout(() => {
+        this.isRefreshing = false
+      }, 350)
     },
     showHugCoupon() {
-      // 直接显示拥抱券文案
-      this.previousPraise = this.currentPraise;
-      this.currentPraise = this.hugCouponText;
-      this.counter++;
-      this.noHugCount = 0; // 获得拥抱券后重置计数器
+      this.previousPraise = this.currentPraise
+      this.currentPraise = this.hugCouponText
+      this.counter++
+      this.noHugCount = 0
+      this.persistCounter()
       
-      // Show floating hearts animation
-      this.showNewHearts = true;
+      this.showNewHearts = true
       setTimeout(() => {
-        this.showNewHearts = false;
-      }, 1000);
+        this.showNewHearts = false
+      }, 1000)
     },
     showHugImage() {
-      this.showHugModal = true;
+      this.showHugModal = true
     },
-    handlePraiseClick(event) {
-      if (event.target.classList.contains('hug-coupon')) {
-        this.showHugImage();
+    copyPraise() {
+      const text = this.isHugCoupon ? this.hugCouponText : (this.currentPraise || '')
+      const clean = String(text)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(clean).then(() => {
+          this.showToastMessage('已复制到剪贴板')
+        }).catch(() => {
+          this.fallbackCopyText(clean)
+        })
+      } else {
+        this.fallbackCopyText(clean)
+      }
+    },
+    fallbackCopyText(text) {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', '')
+      ta.style.position = 'absolute'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      try {
+        document.execCommand('copy')
+        this.showToastMessage('已复制到剪贴板')
+      } catch (e) {
+        this.showToastMessage('复制失败，请手动复制')
+      }
+      document.body.removeChild(ta)
+    },
+    showToastMessage(msg) {
+      this.toastText = msg
+      this.showToast = true
+      setTimeout(() => {
+        this.showToast = false
+      }, 1500)
+    },
+    persistCounter() {
+      try {
+        localStorage.setItem('praiseCounter', String(this.counter))
+      } catch (e) {
+        return
       }
     }
   }
@@ -358,6 +437,54 @@ export default {
 
 .praise-button:active {
   transform: translateY(2px);
+}
+
+.praise-button[disabled] {
+  opacity: 0.7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.secondary-button {
+  background: #ffffff;
+  color: #ec4899;
+  border: 2px solid #fce7f3;
+  padding: 12px 24px;
+  font-size: 1.1rem;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: bold;
+  box-shadow: 0 6px 20px rgba(236, 72, 153, 0.15);
+}
+
+.secondary-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 22px rgba(236, 72, 153, 0.3);
+}
+
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 9999px;
+  font-size: 0.95rem;
+  z-index: 1001;
+  opacity: 1;
+  transition: opacity 0.3s ease;
 }
 
 .hearts {
