@@ -52,15 +52,28 @@
 </template>
 
 <script>
+/**
+ * 今日夸夸机核心组件，负责呈现随机夸奖、拥抱券彩蛋与交互动画。
+ * 主要包含文案随机算法、防重复机制、拥抱券保底以及复制与弹窗体验。
+ */
 export default {
   name: 'PraiseMachine',
   data() {
     return {
+      /** 当前展示的夸夸文本或拥抱券提示语 */
       currentPraise: '',
+      /** 上一次展示的夸夸文本，用于防止重复抽取 */
       previousPraise: '',
+      /** 累计查看次数，刷新后会在页面底部显示并持久化 */
       counter: 0,
+      /** 控制刷新后是否出现新增爱心动画 */
       showNewHearts: false,
+      /** 拥抱券文案，页面中多处使用，集中维护便于修改 */
       hugCouponText: '点击领取真人拥抱券（有效期：见面后立刻兑现）',
+      /**
+       * 夸奖语句池。
+       * 保持文案简洁甜蜜，拥抱券彩蛋需与 hugCouponText 一致以便统一识别。
+       */
       praises: [
         '你笑起来比五仁月饼还甜(别打我)',
         '你的笑容像39度的制热空调一样温暖(犯贱别打)',
@@ -97,15 +110,25 @@ export default {
         '你拥有让世界都变美好的能力',
         '有你陪伴的日子才是好日子'
       ],
+      /** 控制拥抱券弹窗的显示与隐藏 */
       showHugModal: false,
+      /** 是否处于调试模式（通过地址栏 ?debug 参数触发） */
       isDebugMode: false,
-      noHugCount: 0, // 没有出现拥抱券的连续次数计数器
+      /** 连续未抽到拥抱券的次数，用于实现保底机制 */
+      noHugCount: 0,
+      /** 刷新按钮状态，防止用户短时间内重复触发随机逻辑 */
       isRefreshing: false,
+      /** 是否展示复制结果提示气泡 */
       showToast: false,
+      /** 提示气泡文本内容 */
       toastText: ''
     }
   },
   computed: {
+    /**
+     * 判断当前展示内容是否为拥抱券文案。
+     * @returns {boolean} 当展示拥抱券时返回 true
+     */
     isHugCoupon() {
       return this.currentPraise === this.hugCouponText
     }
@@ -114,13 +137,17 @@ export default {
     const saved = parseInt(localStorage.getItem('praiseCounter') || '0', 10)
     if (!isNaN(saved)) this.counter = saved
 
-    // 键盘Esc关闭弹窗
+    /**
+     * 捕获键盘 Escape 键，确保弹窗可被快速关闭。
+     */
     this._handleKeydown = e => {
       if (e.key === 'Escape' && this.showHugModal) this.showHugModal = false
     }
     window.addEventListener('keydown', this._handleKeydown)
 
-    // 监听弹窗开关以控制滚动与聚焦
+    /**
+     * 监听弹窗状态变化：打开时禁止背景滚动并聚焦关闭按钮，提升可访问性。
+     */
     this.$watch(() => this.showHugModal, val => {
       document.body.style.overflow = val ? 'hidden' : ''
       if (val) {
@@ -131,7 +158,7 @@ export default {
       }
     })
 
-    // 检查URL参数中是否包含debug
+    // 检查 URL 查询参数是否包含 debug，以便快速预览拥抱券。
     const urlParams = new URLSearchParams(window.location.search)
     this.isDebugMode = urlParams.has('debug')
     
@@ -147,6 +174,10 @@ export default {
     }
   },
   methods: {
+    /**
+     * 刷新并随机抽取一条新的夸夸文本。
+     * 内置防重复逻辑及拥抱券保底机制，确保体验持续新鲜。
+     */
     getNewPraise() {
       if (this.isRefreshing) return
       this.isRefreshing = true
@@ -189,6 +220,10 @@ export default {
         this.isRefreshing = false
       }, 350)
     },
+    /**
+     * 强制展示拥抱券文案，并同步更新计数与动画。
+     * 常用于调试模式或保底触发。
+     */
     showHugCoupon() {
       this.previousPraise = this.currentPraise
       this.currentPraise = this.hugCouponText
@@ -201,9 +236,16 @@ export default {
         this.showNewHearts = false
       }, 1000)
     },
+    /**
+     * 打开拥抱券大图弹窗。
+     */
     showHugImage() {
       this.showHugModal = true
     },
+    /**
+     * 将当前夸夸文案复制到剪贴板。
+     * 优先使用 Clipboard API，必要时回退到兼容方案。
+     */
     copyPraise() {
       const text = this.isHugCoupon ? this.hugCouponText : (this.currentPraise || '')
       const clean = String(text)
@@ -217,6 +259,10 @@ export default {
         this.fallbackCopyText(clean)
       }
     },
+    /**
+     * 当 Clipboard API 不可用时，使用隐藏 textarea 复制文本。
+     * @param {string} text 需要复制的内容
+     */
     fallbackCopyText(text) {
       const ta = document.createElement('textarea')
       ta.value = text
@@ -233,6 +279,10 @@ export default {
       }
       document.body.removeChild(ta)
     },
+    /**
+     * 展示提示气泡，并在指定时间后自动隐藏。
+     * @param {string} msg 提示文本
+     */
     showToastMessage(msg) {
       this.toastText = msg
       this.showToast = true
@@ -240,6 +290,10 @@ export default {
         this.showToast = false
       }, 1500)
     },
+    /**
+     * 将刷新计数持久化到 localStorage。
+     * 某些隐私模式下可能抛出异常，因此采用 try/catch 静默处理。
+     */
     persistCounter() {
       try {
         localStorage.setItem('praiseCounter', String(this.counter))
